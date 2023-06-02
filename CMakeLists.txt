@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.12)
 project("chdman CBT edition")
-set(build_version "0.238-CBT_edition")
-set(vcs_revision "mame0238")
+set(build_version "0.242-CBT_edition")
+set(vcs_revision "mame0242")
 #cd ../mame && git describe --dirty
 
 if(NOT CMAKE_BUILD_TYPE)
