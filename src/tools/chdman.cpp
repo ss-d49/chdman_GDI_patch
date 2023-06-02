@@ -11,7 +11,7 @@
 #include "avhuff.h"
 #include "aviio.h"
 #include "bitmap.h"
-#include "chdcd.h"
+#include "cdrom.h"
 #include "corefile.h"
 #include "hashing.h"
 #include "md5.h"
@@ -312,11 +312,11 @@ public:
 		// if we have TOC - detect audio sectors and swap data
 		if (m_toc)
 		{
-			assert(offset % CD_FRAME_SIZE == 0);
-			assert(length % CD_FRAME_SIZE == 0);
+			assert(offset % cdrom_file::FRAME_SIZE == 0);
+			assert(length % cdrom_file::FRAME_SIZE == 0);
 
-			int startlba = offset / CD_FRAME_SIZE;
-			int lenlba = length / CD_FRAME_SIZE;
+			int startlba = offset / cdrom_file::FRAME_SIZE;
+			int lenlba = length / cdrom_file::FRAME_SIZE;
 			uint8_t *_dest = reinterpret_cast<uint8_t *>(dest);
 
 			for (int chdlba = 0; chdlba < lenlba; chdlba++)
@@ -330,11 +330,11 @@ public:
 						break;
 					}
 				// is it audio ?
-				if (m_toc->tracks[tracknum].trktype != CD_TRACK_AUDIO)
+				if (m_toc->tracks[tracknum].trktype != cdrom_file::CD_TRACK_AUDIO)
 					continue;
 				// byteswap if yes
-				int dataoffset = chdlba * CD_FRAME_SIZE;
-				for (uint32_t swapindex = dataoffset; swapindex < (dataoffset + CD_MAX_SECTOR_DATA); swapindex += 2)
+				int dataoffset = chdlba * cdrom_file::FRAME_SIZE;
+				for (uint32_t swapindex = dataoffset; swapindex < (dataoffset + cdrom_file::MAX_SECTOR_DATA); swapindex += 2)
 				{
 					uint8_t temp = _dest[swapindex];
 					_dest[swapindex] = _dest[swapindex + 1];
@@ -346,7 +346,7 @@ public:
 		return length;
 	}
 
-const cdrom_toc *   m_toc;
+const cdrom_file::toc *   m_toc;
 
 private:
 	// internal state
@@ -362,7 +362,7 @@ class chd_cd_compressor : public chd_file_compressor
 {
 public:
 	// construction/destruction
-	chd_cd_compressor(cdrom_toc &toc, chdcd_track_input_info &info)
+	chd_cd_compressor(cdrom_file::toc &toc, cdrom_file::track_input_info &info)
 		: m_file(),
 			m_toc(toc),
 			m_info(info) { }
@@ -375,8 +375,8 @@ public:
 	virtual uint32_t read_data(void *_dest, uint64_t offset, uint32_t length)
 	{
 		// verify assumptions made below
-		assert(offset % CD_FRAME_SIZE == 0);
-		assert(length % CD_FRAME_SIZE == 0);
+		assert(offset % cdrom_file::FRAME_SIZE == 0);
+		assert(length % cdrom_file::FRAME_SIZE == 0);
 
 		// initialize destination to 0 so that unused areas are filled
 		uint8_t *dest = reinterpret_cast<uint8_t *>(_dest);
@@ -387,8 +387,8 @@ public:
 		uint32_t length_remaining = length;
 		for (int tracknum = 0; tracknum < m_toc.numtrks; tracknum++)
 		{
-			const cdrom_track_info &trackinfo = m_toc.tracks[tracknum];
-			uint64_t endoffs = startoffs + (uint64_t)(trackinfo.frames + trackinfo.extraframes) * CD_FRAME_SIZE;
+			const cdrom_file::track_info &trackinfo = m_toc.tracks[tracknum];
+			uint64_t endoffs = startoffs + (uint64_t)(trackinfo.frames + trackinfo.extraframes) * cdrom_file::FRAME_SIZE;
 			if (offset >= startoffs && offset < endoffs)
 			{
 				// if we don't already have this file open, open it now
@@ -415,7 +415,7 @@ public:
 				while (length_remaining != 0 && offset < endoffs)
 				{
 					// determine start of current frame
-					uint64_t src_frame_start = src_track_start + ((offset - startoffs) / CD_FRAME_SIZE) * bytesperframe;
+					uint64_t src_frame_start = src_track_start + ((offset - startoffs) / cdrom_file::FRAME_SIZE) * bytesperframe;
 
 					// auto-advance next track for split-bin read
 					if (src_frame_start == split_track_start && m_lastfile.compare(m_info.track[tracknum+1].fname)!=0)
@@ -459,9 +459,9 @@ public:
 					}
 
 					// advance
-					offset += CD_FRAME_SIZE;
-					dest += CD_FRAME_SIZE;
-					length_remaining -= CD_FRAME_SIZE;
+					offset += cdrom_file::FRAME_SIZE;
+					dest += cdrom_file::FRAME_SIZE;
+					length_remaining -= cdrom_file::FRAME_SIZE;
 					if (length_remaining == 0)
 						break;
 				}
@@ -475,10 +475,10 @@ public:
 
 private:
 	// internal state
-	std::string                 m_lastfile;
-	util::core_file::ptr        m_file;
-	cdrom_toc &                 m_toc;
-	chdcd_track_input_info &    m_info;
+	std::string                   m_lastfile;
+	util::core_file::ptr          m_file;
+	cdrom_file::toc &             m_toc;
+	cdrom_file::track_input_info &m_info;
 };
 
 
@@ -1295,7 +1295,7 @@ static void compress_common(chd_file_compressor &chd)
 //  to a CUE file
 //-------------------------------------------------
 
-void output_track_metadata(int mode, util::core_file &file, int tracknum, const cdrom_track_info &info, const std::string &filename, uint32_t frameoffs, uint64_t discoffs)
+void output_track_metadata(int mode, util::core_file &file, int tracknum, const cdrom_file::track_info &info, const std::string &filename, uint32_t frameoffs, uint64_t discoffs)
 {
 	if (mode == MODE_GDI)
 	{
@@ -1303,42 +1303,42 @@ void output_track_metadata(int mode, util::core_file &file, int tracknum, const 
 
 		switch (info.trktype)
 		{
-			case CD_TRACK_MODE1:
+			case cdrom_file::CD_TRACK_MODE1:
 				mode = 4;
 				size = 2048;
 				break;
 
-			case CD_TRACK_MODE1_RAW:
+			case cdrom_file::CD_TRACK_MODE1_RAW:
 				mode = 4;
 				size = 2352;
 				break;
 
-			case CD_TRACK_MODE2:
+			case cdrom_file::CD_TRACK_MODE2:
 				mode = 4;
 				size = 2336;
 				break;
 
-			case CD_TRACK_MODE2_FORM1:
+			case cdrom_file::CD_TRACK_MODE2_FORM1:
 				mode = 4;
 				size = 2048;
 				break;
 
-			case CD_TRACK_MODE2_FORM2:
+			case cdrom_file::CD_TRACK_MODE2_FORM2:
 				mode = 4;
 				size = 2324;
 				break;
 
-			case CD_TRACK_MODE2_FORM_MIX:
+			case cdrom_file::CD_TRACK_MODE2_FORM_MIX:
 				mode = 4;
 				size = 2336;
 				break;
 
-			case CD_TRACK_MODE2_RAW:
+			case cdrom_file::CD_TRACK_MODE2_RAW:
 				mode = 4;
 				size = 2352;
 				break;
 
-			case CD_TRACK_AUDIO:
+			case cdrom_file::CD_TRACK_AUDIO:
 				mode = 0;
 				size = 2352;
 				break;
@@ -1358,20 +1358,20 @@ void output_track_metadata(int mode, util::core_file &file, int tracknum, const 
 		std::string tempstr;
 		switch (info.trktype)
 		{
-			case CD_TRACK_MODE1:
-			case CD_TRACK_MODE1_RAW:
+			case cdrom_file::CD_TRACK_MODE1:
+			case cdrom_file::CD_TRACK_MODE1_RAW:
 				tempstr = string_format("MODE1/%04d", info.datasize);
 				break;
 
-			case CD_TRACK_MODE2:
-			case CD_TRACK_MODE2_FORM1:
-			case CD_TRACK_MODE2_FORM2:
-			case CD_TRACK_MODE2_FORM_MIX:
-			case CD_TRACK_MODE2_RAW:
+			case cdrom_file::CD_TRACK_MODE2:
+			case cdrom_file::CD_TRACK_MODE2_FORM1:
+			case cdrom_file::CD_TRACK_MODE2_FORM2:
+			case cdrom_file::CD_TRACK_MODE2_FORM_MIX:
+			case cdrom_file::CD_TRACK_MODE2_RAW:
 				tempstr = string_format("MODE2/%04d", info.datasize);
 				break;
 
-			case CD_TRACK_AUDIO:
+			case cdrom_file::CD_TRACK_AUDIO:
 				tempstr.assign("AUDIO");
 				break;
 		}
@@ -1411,15 +1411,15 @@ void output_track_metadata(int mode, util::core_file &file, int tracknum, const 
 
 		// write out the track type
 		std::string modesubmode;
-		if (info.subtype != CD_SUB_NONE)
-			modesubmode = string_format("%s %s", cdrom_get_type_string(info.trktype), cdrom_get_subtype_string(info.subtype));
+		if (info.subtype != cdrom_file::CD_SUB_NONE)
+			modesubmode = string_format("%s %s", cdrom_file::get_type_string(info.trktype), cdrom_file::get_subtype_string(info.subtype));
 		else
-			modesubmode = string_format("%s", cdrom_get_type_string(info.trktype));
+			modesubmode = string_format("%s", cdrom_file::get_type_string(info.trktype));
 		file.printf("TRACK %s\n", modesubmode);
 
 		// write out the attributes
 		file.printf("NO COPY\n");
-		if (info.trktype == CD_TRACK_AUDIO)
+		if (info.trktype == cdrom_file::CD_TRACK_AUDIO)
 		{
 			file.printf("NO PRE_EMPHASIS\n");
 			file.printf("TWO_CHANNEL_AUDIO\n");
@@ -1964,6 +1964,7 @@ static void do_create_hd(parameters_map &params)
 			if (err)
 				report_error(1, "Error adding hard disk metadata: %s", err.message());
 		}
+
 		// compress it generically
 		if (input_file)
 			compress_common(*chd);
@@ -1987,12 +1988,12 @@ static void do_create_hd(parameters_map &params)
 static void do_create_cd(parameters_map &params)
 {
 	// process input file
-	chdcd_track_input_info track_info;
-	cdrom_toc toc = { 0 };
+	cdrom_file::track_input_info track_info;
+	cdrom_file::toc toc = { 0 };
 	auto input_file_str = params.find(OPTION_INPUT);
 	if (input_file_str != params.end())
 	{
-		std::error_condition err = chdcd_parse_toc(input_file_str->second->c_str(), toc, track_info);
+		std::error_condition err = cdrom_file::parse_toc(*input_file_str->second, toc, track_info);
 		if (err)
 			report_error(1, "Error parsing input file (%s: %s)\n", *input_file_str->second, err.message());
 	}
@@ -2002,8 +2003,8 @@ static void do_create_cd(parameters_map &params)
 	std::string *output_chd_str = parse_output_chd_parameters(params, output_parent);
 
 	// process hunk size
-	uint32_t hunk_size = output_parent.opened() ? output_parent.hunk_bytes() : CD_FRAMES_PER_HUNK * CD_FRAME_SIZE;
-	parse_hunk_size(params, CD_FRAME_SIZE, hunk_size);
+	uint32_t hunk_size = output_parent.opened() ? output_parent.hunk_bytes() : cdrom_file::FRAMES_PER_HUNK * cdrom_file::FRAME_SIZE;
+	parse_hunk_size(params, cdrom_file::FRAME_SIZE, hunk_size);
 
 	// process compression
 	chd_codec_type compression[4];
@@ -2018,9 +2019,9 @@ static void do_create_cd(parameters_map &params)
 	uint32_t totalsectors = 0;
 	for (int tracknum = 0; tracknum < toc.numtrks; tracknum++)
 	{
-		cdrom_track_info &trackinfo = toc.tracks[tracknum];
-		int padded = (trackinfo.frames + CD_TRACK_PADDING - 1) / CD_TRACK_PADDING;
-		trackinfo.extraframes = padded * CD_TRACK_PADDING - trackinfo.frames;
+		cdrom_file::track_info &trackinfo = toc.tracks[tracknum];
+		int padded = (trackinfo.frames + cdrom_file::TRACK_PADDING - 1) / cdrom_file::TRACK_PADDING;
+		trackinfo.extraframes = padded * cdrom_file::TRACK_PADDING - trackinfo.frames;
 		origtotalsectors += trackinfo.frames;
 		totalsectors += trackinfo.frames + trackinfo.extraframes;
 	}
@@ -2033,7 +2034,7 @@ static void do_create_cd(parameters_map &params)
 	printf("Input tracks: %d\n", toc.numtrks);
 	printf("Input length: %s\n", msf_string_from_frames(origtotalsectors).c_str());
 	printf("Compression:  %s\n", compression_string(compression).c_str());
-	printf("Logical size: %s\n", big_int_string(uint64_t(totalsectors) * CD_FRAME_SIZE).c_str());
+	printf("Logical size: %s\n", big_int_string(uint64_t(totalsectors) * cdrom_file::FRAME_SIZE).c_str());
 
 	// catch errors so we can close & delete the output file
 	chd_cd_compressor *chd = nullptr;
@@ -2043,14 +2044,14 @@ static void do_create_cd(parameters_map &params)
 		chd = new chd_cd_compressor(toc, track_info);
 		std::error_condition err;
 		if (output_parent.opened())
-			err = chd->create(output_chd_str->c_str(), uint64_t(totalsectors) * uint64_t(CD_FRAME_SIZE), hunk_size, compression, output_parent);
+			err = chd->create(output_chd_str->c_str(), uint64_t(totalsectors) * uint64_t(cdrom_file::FRAME_SIZE), hunk_size, compression, output_parent);
 		else
-			err = chd->create(output_chd_str->c_str(), uint64_t(totalsectors) * uint64_t(CD_FRAME_SIZE), hunk_size, CD_FRAME_SIZE, compression);
+			err = chd->create(output_chd_str->c_str(), uint64_t(totalsectors) * uint64_t(cdrom_file::FRAME_SIZE), hunk_size, cdrom_file::FRAME_SIZE, compression);
 		if (err)
 			report_error(1, "Error creating CHD file (%s): %s", *output_chd_str, err.message());
 
 		// add the standard CD metadata; we do this even if we have a parent because it might be different
-		err = cdrom_write_metadata(chd, &toc);
+		err = cdrom_file::write_metadata(chd, toc);
 		if (err)
 			report_error(1, "Error adding CD metadata: %s", err.message());
 
@@ -2304,15 +2305,13 @@ static void do_copy(parameters_map &params)
 		// if we need to re-do the CD metadata, do it now
 		if (redo_cd)
 		{
-			cdrom_file *cdrom = cdrom_open(&input_chd);
-			if (cdrom == nullptr)
-				report_error(1, "Error upgrading CD metadata");
-			const cdrom_toc *toc = cdrom_get_toc(cdrom);
-			err = cdrom_write_metadata(chd, toc);
+			cdrom_file *cdrom = new cdrom_file(&input_chd);
+			const cdrom_file::toc &toc = cdrom->get_toc();
+			err = cdrom_file::write_metadata(chd, toc);
 			if (err)
 				report_error(1, "Error writing upgraded CD metadata: %s", err.message());
 			if (cdda_swap)
-				chd->m_toc = toc;
+				chd->m_toc = &toc;
 		}
 
 		// compress it generically
@@ -2411,112 +2410,6 @@ static void do_extract_raw(parameters_map &params)
 
 
 //-------------------------------------------------
-//  gdrom_convert_toc() - Redump uses .cue/.bin
-//  for GDROM dumps. TOSEC uses .gdi/.bin instead.
-//  Redump and TOSEC also have slightly different
-//  TOC layouts.
-//
-//  When creating CHDs from Redump GDROM dumps we
-//  adjust Redumps TOC so it matches TOSEC. This
-//  ensures there's only one TOC layout for GDROM
-//  stored in CHD. The TOSEC layout.
-//
-//  Extractcd to .cue/.bin reverts the TOC to the
-//  Redump layout. If we didn't do this createcd
-//  followed by extractcd would corrupt the GDROM.
-//  This means .cue/.bin is always Redump layout.
-//
-//  In summary:
-//
-//     GDROM in .cue/.bin - Redump TOC
-//     GDROM in .gdi/.bin - TOSEC TOC
-//     GDROM in .chd      - TOSEC TOC
-//-------------------------------------------------
-static void gdrom_convert_toc(cdrom_toc *toc)
-{
-	// GDROM should have at least 3 tracks
-	assert(toc->numtrks > 2);
-
-	// restore the pregaps for Redump .cue/.bin export
-	for (int trknum = 0; trknum < toc->numtrks; trknum++)
-	{
-		toc->tracks[trknum].multicuearea = ((trknum < 2) ? GDROM_SINGLE_DENSITY : GDROM_HIGH_DENSITY);
-		toc->tracks[trknum].pgtype = toc->tracks[trknum].trktype;
-		toc->tracks[trknum].pregap = 150;
-		toc->tracks[trknum].pgdatasize = 2352;
-	}
-
-	// first track in each DENSITY area has 0 pregap
-	toc->tracks[0].pregap = 0;
-	toc->tracks[2].pregap = 0;
-
-	// strip the SINGLE density leadout (45000 LBA)
-	toc->tracks[1].frames -= toc->tracks[1].padframes;
-	toc->tracks[1].padframes = 0;
-
-	// adjust padding and frames to match Redump layout
-	for (int trknum = 0; trknum < toc->numtrks - 1; trknum++)
-	{
-		if (toc->tracks[trknum].pgtype == CD_TRACK_MODE1_RAW)
-		{
-			// un-pad DATA track
-			toc->tracks[trknum].frames -= toc->tracks[trknum].padframes;
-			toc->tracks[trknum].padframes = 0;
-		}
-
-		if (toc->tracks[trknum].pgtype == CD_TRACK_AUDIO && toc->tracks[trknum+1].pgtype == CD_TRACK_AUDIO)
-		{
-			// un-shift consecutive AUDIO tracks
-			toc->tracks[trknum].splitframes = toc->tracks[trknum].pregap;
-		}
-
-		if (toc->tracks[trknum].pgtype == CD_TRACK_AUDIO && toc->tracks[trknum+1].pgtype == CD_TRACK_MODE1_RAW)
-		{
-			// un-shrink AUDIO track preceding DATA track
-			toc->tracks[trknum].frames += toc->tracks[trknum].pregap;
-		}
-	}
-
-	// special handling for last tracks based on GDROM pattern
-	switch (gdrom_identify_pattern(toc))
-	{
-		case GDROM_TYPE_I:
-			// do nothing
-			break;
-
-		case GDROM_TYPE_II:
-			// un-shrink final AUDIO track
-			toc->tracks[toc->numtrks-1].frames += toc->tracks[toc->numtrks-1].pregap;
-			break;
-
-		case GDROM_TYPE_III:
-			// second last DATA track extends 225 frames into last DATA tracks 225 pregap
-			toc->tracks[toc->numtrks-2].frames -= 225;
-			toc->tracks[toc->numtrks-2].splitframes = 225;
-
-			// grow the last track by 225 pregap (225 frames data from end of previous track)
-			toc->tracks[toc->numtrks-1].frames += 225;
-			toc->tracks[toc->numtrks-1].pregap = 225;
-			break;
-
-		case GDROM_TYPE_III_SPLIT:
-			// second last AUDIO track extends 75 frames into last DATA tracks 225 pregap
-			toc->tracks[toc->numtrks-2].frames -= 225;
-			toc->tracks[toc->numtrks-2].padframes = 0;
-			toc->tracks[toc->numtrks-2].splitframes = 75;
-
-			// grow the last track by 225 pregap (75 frames actual-zeroes, 150 frames data-zeroes with PQ and sync)
-			toc->tracks[toc->numtrks-1].frames += 225;
-			toc->tracks[toc->numtrks-1].pregap = 225;
-			break;
-
-		case GDROM_TYPE_UNKNOWN:
-			break;
-	}
-}
-
-
-//-------------------------------------------------
 //  do_extract_cd - extract a CD file from a
 //  CHD image
 //-------------------------------------------------
@@ -2529,10 +2422,8 @@ static void do_extract_cd(parameters_map &params)
 	parse_input_chd_parameters(params, input_chd, input_parent_chd);
 
 	// further process input file
-	cdrom_file *cdrom = cdrom_open(&input_chd);
-	if (cdrom == nullptr)
-		report_error(1, "Unable to recognize CHD file as a CD");
-	cdrom_toc toc = *(cdrom_get_toc(cdrom));
+	cdrom_file *cdrom = new cdrom_file(&input_chd);
+	cdrom_file::toc &toc = const_cast<cdrom_file::toc&>(cdrom->get_toc());
 
 	// verify output file doesn't exist
 	auto output_file_str = params.find(OPTION_OUTPUT);
@@ -2577,10 +2468,10 @@ static void do_extract_cd(parameters_map &params)
 			mode = MODE_GDI;
 		}
 
-		if ((mode == MODE_CUEBIN || mode == MODE_CUEBIN_SPLIT) && toc.flags == CD_FLAG_GDROM)
+		if ((mode == MODE_CUEBIN || mode == MODE_CUEBIN_SPLIT) && toc.flags == cdrom_file::CD_FLAG_GDROM)
 		{
 			mode = MODE_GDROM_CUEBIN;
-			gdrom_convert_toc(&toc);
+			cdrom_file::gdrom_convert_toc(&toc);
 		}
 
 		// process output file
@@ -2648,7 +2539,7 @@ static void do_extract_cd(parameters_map &params)
 			}
 
 			// output the metadata about the track to the TOC file
-			cdrom_track_info &trackinfo = toc.tracks[tracknum];
+			cdrom_file::track_info &trackinfo = toc.tracks[tracknum];
 			if (mode == MODE_GDI)
 			{
 				output_track_metadata(mode, *output_toc_file, tracknum, trackinfo, std::string(core_filename_extract_base(trackbin_name)), discoffs, outputoffs);
@@ -2664,8 +2555,8 @@ static void do_extract_cd(parameters_map &params)
 
 			// If this is bin/cue output and the CHD contains subdata, warn the user and don't include
 			// the subdata size in the buffer calculation.
-			uint32_t output_frame_size = trackinfo.datasize + ((trackinfo.subtype != CD_SUB_NONE) ? trackinfo.subsize : 0);
-			if (trackinfo.subtype != CD_SUB_NONE && ((mode == MODE_CUEBIN) || (mode == MODE_GDI) || (mode == MODE_GDROM_CUEBIN) || (mode == MODE_CUEBIN_SPLIT)))
+			uint32_t output_frame_size = trackinfo.datasize + ((trackinfo.subtype != cdrom_file::CD_SUB_NONE) ? trackinfo.subsize : 0);
+			if (trackinfo.subtype != cdrom_file::CD_SUB_NONE && ((mode == MODE_CUEBIN) || (mode == MODE_GDI) || (mode == MODE_GDROM_CUEBIN) || (mode == MODE_CUEBIN_SPLIT)))
 			{
 				printf("Warning: Track %d has subcode data.  bin/cue and gdi formats cannot contain subcode data and it will be omitted.\n", tracknum+1);
 				printf("       : This may affect usage of the output image.  Use bin/toc output to keep all data.\n");
@@ -2678,7 +2569,7 @@ static void do_extract_cd(parameters_map &params)
 			// GDROM .cue/.bin embeds pregap in output file
 			if (mode == MODE_GDROM_CUEBIN && (trackinfo.pregap > 0) && (trackinfo.pgdatasize > 0))
 			{
-				if ((tracknum == toc.numtrks-1) && (gdrom_identify_pattern(&toc) >= GDROM_TYPE_III))
+				if ((tracknum == toc.numtrks-1) && (cdrom_file::gdrom_identify_pattern(&toc) >= cdrom_file::TYPE_III))
 				{
 					// special case, 75 frames actual-zeroes, 150 frames data-zeroes with PQ and sync
 					outputoffs += 75 * trackinfo.pgdatasize;
@@ -2691,21 +2582,21 @@ static void do_extract_cd(parameters_map &params)
 
 					for (int frame=0; frame < 150; frame++)
 					{
-						uint32_t msf = lba_to_msf(physframeofs);
+						uint32_t msf = cdrom_file::lba_to_msf(physframeofs);
 						memcpy(&buffer[0], syncbytes, 12);
 						buffer[12] = msf>>16;
 						buffer[13] = msf>>8;
 						buffer[14] = msf&0xff;
 						buffer[15] = 1; // mode_1
 						memset(&buffer[16], 0, 2048);
-						edc_generate(&buffer[0]);
-						ecc_generate(&buffer[0]);
+						cdrom_file::edc_generate(&buffer[0]);
+						cdrom_file::ecc_generate(&buffer[0]);
 
 						output_bin_file->seek(outputoffs, SEEK_SET);
 						size_t byteswritten;
-						output_bin_file->write(&buffer[0], 2352, byteswritten);
-						if (byteswritten != 2352)
-							report_error(1, "Error writing pregap-frame %d to file (%s): %s\n", frame, output_file_str->second->c_str(), "Write error");
+						std::error_condition const writerr = output_bin_file->write(&buffer[0], 2352, byteswritten);
+						if (writerr || (byteswritten != 2352))
+							report_error(1, "Error writing pregap-frame %d to file (%s): %s\n", frame, *output_file_str->second, "Write error");
 
 						outputoffs += 2352;
 						physframeofs++;
@@ -2727,11 +2618,11 @@ static void do_extract_cd(parameters_map &params)
 				progress(false, "Extracting, %.1f%% complete... \r", 100.0 * double(outputoffs) / double(total_bytes));
 
 				// read the data
-				cdrom_read_data(cdrom, cdrom_get_track_start_phys(cdrom, tracknum) + frame, &buffer[bufferoffs], trackinfo.trktype, true);
+				cdrom->read_data(cdrom->get_track_start_phys(tracknum) + frame, &buffer[bufferoffs], trackinfo.trktype, true);
 
 				// for CDRWin and GDI audio tracks must be reversed
 				// in the case of GDI and CHD version < 5 we assuming source CHD image is GDROM so audio tracks is already reversed
-				if (((mode == MODE_GDI && input_chd.version() > 4) || (mode == MODE_CUEBIN) || (mode == MODE_GDROM_CUEBIN) || (mode == MODE_CUEBIN_SPLIT)) && (trackinfo.trktype == CD_TRACK_AUDIO))
+				if (((mode == MODE_GDI && input_chd.version() > 4) || (mode == MODE_CUEBIN) || (mode == MODE_GDROM_CUEBIN) || (mode == MODE_CUEBIN_SPLIT)) && (trackinfo.trktype == cdrom_file::CD_TRACK_AUDIO))
 					for (int swapindex = 0; swapindex < trackinfo.datasize; swapindex += 2)
 					{
 						uint8_t swaptemp = buffer[bufferoffs + swapindex];
@@ -2742,9 +2633,9 @@ static void do_extract_cd(parameters_map &params)
 				discoffs++;
 
 				// read the subcode data
-				if (trackinfo.subtype != CD_SUB_NONE && (mode == MODE_NORMAL))
+				if (trackinfo.subtype != cdrom_file::CD_SUB_NONE && (mode == MODE_NORMAL))
 				{
-					cdrom_read_subcode(cdrom, cdrom_get_track_start_phys(cdrom, tracknum) + frame, &buffer[bufferoffs], true);
+					cdrom->read_subcode(cdrom->get_track_start_phys(tracknum) + frame, &buffer[bufferoffs], true);
 					bufferoffs += trackinfo.subsize;
 				}
 

@@ -31,8 +31,6 @@ add_library(utils STATIC
     ${utils_dir}/cdrom.h
     ${utils_dir}/chd.cpp
     ${utils_dir}/chd.h
-    ${utils_dir}/chdcd.cpp
-    ${utils_dir}/chdcd.h
     ${utils_dir}/chdcodec.cpp
     ${utils_dir}/chdcodec.h
     ${utils_dir}/client_http.hpp
