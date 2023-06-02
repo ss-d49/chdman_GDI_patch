@@ -85,3 +85,5 @@ add_compile_definitions(
   _CRT_STDIO_LEGACY_WIDE_SPECIFIERS
 )
 endif()
+
+install(TARGETS chdman DESTINATION ${CMAKE_INSTALL_PREFIX})

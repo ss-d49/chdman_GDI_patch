@@ -1191,6 +1191,46 @@ bool chdcd_is_gdicue(const char *tocfname)
 	return has_rem_singledensity && has_rem_highdensity;
 }
 
+
+/*---------------------------------------------------------------------------------------
+    gdrom_identify_pattern - Dreamcast has well-known standardised GDROM patterns
+----------------------------------------------------------------------------------------*/
+
+/**
+ * Dreamcast GDROM patterns are identified by track types and number of tracks
+ *
+ *   Pattern I - (SD) DATA + AUDIO, (HD) DATA
+ *   Pattern II - (SD) DATA + AUDIO, (HD) DATA + ... + AUDIO
+ *   Pattern III - (SD) DATA + AUDIO, (HD) DATA + ... + DATA
+ *
+ * And a III variant when two HD DATA tracks are split by one or more AUDIO tracks.
+ */
+
+enum gdrom_pattern gdrom_identify_pattern(const cdrom_toc *toc)
+{
+	if (toc->numtrks > 4 && toc->tracks[toc->numtrks-1].trktype == CD_TRACK_MODE1_RAW)
+	{
+		if (toc->tracks[toc->numtrks-2].trktype == CD_TRACK_AUDIO)
+			return GDROM_TYPE_III_SPLIT;
+		else
+			return GDROM_TYPE_III;
+	}
+	else if (toc->numtrks > 3)
+	{
+		if (toc->tracks[toc->numtrks-1].trktype == CD_TRACK_AUDIO)
+			return GDROM_TYPE_II;
+		else
+			return GDROM_TYPE_III;
+	}
+	else if (toc->numtrks == 3)
+	{
+		return GDROM_TYPE_I;
+	}
+
+	return GDROM_TYPE_UNKNOWN;
+}
+
+
 /*-----------------------------------------------------------------
     chdcd_parse_gdicue - parse a Redump multi-CUE for Dreamcast GDI
 ------------------------------------------------------------------*/
@@ -1226,8 +1266,7 @@ std::error_condition chdcd_parse_gdicue(const char *tocfname, cdrom_toc &outtoc,
 	std::string lastfname;
 	uint32_t wavlen, wavoffs;
 	std::string path = std::string(tocfname);
-	enum gdi_area current_area = SINGLE_DENSITY;
-	enum gdi_pattern disc_pattern = TYPE_UNKNOWN;
+	enum gdrom_area current_area = GDROM_SINGLE_DENSITY;
 
 	FILE *infile = fopen(tocfname, "rt");
 	if (!infile)
@@ -1257,14 +1296,14 @@ std::error_condition chdcd_parse_gdicue(const char *tocfname, cdrom_toc &outtoc,
 			/* single-density area starts LBA = 0 */
 			if (!strncmp(linebuffer, "REM SINGLE-DENSITY AREA", 23))
 			{
-				current_area = SINGLE_DENSITY;
+				current_area = GDROM_SINGLE_DENSITY;
 				continue;
 			}
 
 			/* high-density area starts LBA = 45000 */
 			if (!strncmp(linebuffer, "REM HIGH-DENSITY AREA", 21))
 			{
-				current_area = HIGH_DENSITY;
+				current_area = GDROM_HIGH_DENSITY;
 				continue;
 			}
 
@@ -1520,28 +1559,6 @@ std::error_condition chdcd_parse_gdicue(const char *tocfname, cdrom_toc &outtoc,
 	}
 
 	/*
-	 * Dreamcast patterns are identified by track types and number of tracks
-	 */
-	if (outtoc.numtrks > 4 && outtoc.tracks[outtoc.numtrks-1].pgtype == CD_TRACK_MODE1_RAW)
-	{
-		if (outtoc.tracks[outtoc.numtrks-2].pgtype == CD_TRACK_AUDIO)
-			disc_pattern = TYPE_III_SPLIT;
-		else
-			disc_pattern = TYPE_III;
-	}
-	else if (outtoc.numtrks > 3)
-	{
-		if (outtoc.tracks[outtoc.numtrks-1].pgtype == CD_TRACK_AUDIO)
-			disc_pattern = TYPE_II;
-		else
-			disc_pattern = TYPE_III;
-	}
-	else if (outtoc.numtrks == 3)
-	{
-		disc_pattern = TYPE_I;
-	}
-
-	/*
 	 * Strip pregaps from Redump tracks and adjust the LBA offset to match TOSEC layout
 	 */
 	for (trknum = 1; trknum < outtoc.numtrks; trknum++)
@@ -1583,7 +1600,7 @@ std::error_condition chdcd_parse_gdicue(const char *tocfname, cdrom_toc &outtoc,
 	/*
 	 * Special handling for TYPE_III_SPLIT, pregap in last track contains 75 frames audio and 150 frames data
 	 */
-	if (disc_pattern == TYPE_III_SPLIT)
+	if (gdrom_identify_pattern(&outtoc) == GDROM_TYPE_III_SPLIT)
 	{
 		assert(outtoc.tracks[outtoc.numtrks-1].pregap == 225);
 
@@ -1603,7 +1620,7 @@ std::error_condition chdcd_parse_gdicue(const char *tocfname, cdrom_toc &outtoc,
 	 */
 	for (trknum = 1; trknum < outtoc.numtrks; trknum++)
 	{
-		if (outtoc.tracks[trknum].multicuearea == HIGH_DENSITY && outtoc.tracks[trknum-1].multicuearea == SINGLE_DENSITY)
+		if (outtoc.tracks[trknum].multicuearea == GDROM_HIGH_DENSITY && outtoc.tracks[trknum-1].multicuearea == GDROM_SINGLE_DENSITY)
 		{
 			outtoc.tracks[trknum].physframeofs = 45000;
 			int dif=outtoc.tracks[trknum].physframeofs-(outtoc.tracks[trknum-1].frames+outtoc.tracks[trknum-1].physframeofs);

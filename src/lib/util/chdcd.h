@@ -5,6 +5,7 @@
     CDRDAO TOC parser for CHD compression frontend
 
 ***************************************************************************/
+
 #ifndef MAME_LIB_UTIL_CHDCD_H
 #define MAME_LIB_UTIL_CHDCD_H
 
@@ -36,5 +37,33 @@ struct chdcd_track_input_info
 
 
 std::error_condition chdcd_parse_toc(const char *tocfname, cdrom_toc &outtoc, chdcd_track_input_info &outinfo);
+
+
+/***************************************************************************
+    CONSTANTS
+***************************************************************************/
+
+enum gdrom_area
+{
+	GDROM_SINGLE_DENSITY = 0,
+	GDROM_HIGH_DENSITY
+};
+
+enum gdrom_pattern
+{
+	GDROM_TYPE_UNKNOWN = 0,
+	GDROM_TYPE_I,
+	GDROM_TYPE_II,
+	GDROM_TYPE_III,
+	GDROM_TYPE_III_SPLIT
+};
+
+/***************************************************************************
+    FUNCTION PROTOTYPES
+***************************************************************************/
+
+/* GDROM utilities */
+enum gdrom_pattern gdrom_identify_pattern(const cdrom_toc *toc);
+
 
 #endif // MAME_LIB_UTIL_CHDCD_H

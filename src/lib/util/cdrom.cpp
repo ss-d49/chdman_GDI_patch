@@ -81,6 +81,13 @@ const int SYNC_NUM_BYTES = 12;
 /** @brief  offset within sector. */
 const int MODE_OFFSET = 0x00f;
 
+/** @brief  EDC offsets */
+constexpr int EDC_MODE1_OFFSET = 16+2048;
+/** @brief  EDC CRC table size */
+constexpr int EDC_CRCTABLE_SIZE = 256;
+/** @brief  EDC polynomial as per ECMA 130 */
+constexpr uint32_t EDC_POLYNOMIAL = 0x8001801bL;
+
 /** @brief  offset within sector. */
 const int ECC_P_OFFSET = 0x81c;
 /** @brief  2 lots of 86. */
@@ -1581,6 +1588,64 @@ static const uint16_t qoffsets[ECC_Q_NUM_BYTES][ECC_Q_COMP] =
 };
 
 
+/**
+ * @fn  static constexpr std::array<uint32_t, EDC_CRCTABLE_SIZE> edc_crctable_gen
+ *
+ * @brief   -------------------------------------------------
+ *           edc_crctable_gen - calculate CRC checksums as per
+ *           ECMA 130 and return lookup table
+ *          -------------------------------------------------.
+ */
+
+static constexpr std::array<uint32_t, EDC_CRCTABLE_SIZE> edc_crctable_gen(void)
+{
+	std::array<uint32_t, EDC_CRCTABLE_SIZE> table = { 0 };
+
+	for (int index = 0; index < EDC_CRCTABLE_SIZE; index++)
+	{
+		uint32_t r = reverse32(index);
+
+		for (int bit = 0; bit < 8; bit++)
+		{
+			if (r & 0x80000000L)
+				r = (r << 1) ^ EDC_POLYNOMIAL;
+			else
+				r <<= 1;
+		}
+
+		table[index] = reverse32(r);
+	}
+
+	return table;
+}
+
+
+/**
+ * @brief   -------------------------------------------------
+ *            EDC_crctable - each value represents a CRC used
+ *            in calculating the EDC for MODE1 sectors. the
+ *            CRC polynomial is from ECMA 130 section 14.3
+ *
+ *             P(X) = (X^16 + x^15 + x^2 + 1) * (x^16 + x^2 + x + 1)
+ *
+ *            where least significant parity bit (x^0) is the
+ *            most significant bit of the checksum. the CRC
+ *            table can be verified using these parameters in
+ *            Rocksoft Model CRC Algorithm.
+ *
+ *             Width   : 4 bytes
+ *             Poly    : 0x8001801bL
+ *             Reverse : TRUE
+ *
+ *            the CRC in this table are generated at compile
+ *            with edc_crctable_gen(). credit to cdrtools and
+ *            Rocksoft for the code and technical details.
+ *          -------------------------------------------------.
+ */
+
+static const auto EDC_crctable = edc_crctable_gen();
+
+
 //-------------------------------------------------
 //  ecc_source_byte - return data from the sector
 //  at the given offset, masking anything
@@ -1652,6 +1717,33 @@ bool ecc_verify(const uint8_t *sector)
 			return false;
 	}
 	return true;
+}
+
+/**
+ * @fn  void edc_generate(uint8_t *sector)
+ *
+ * @brief   -------------------------------------------------
+ *            edc_generate - generate the EDC checksum for a sector, overwriting any
+ *            existing checksum, code is only valid for MODE1 sectors
+ *          -------------------------------------------------.
+ *
+ * @param [in,out]  sector  If non-null, the sector.
+ */
+void edc_generate(uint8_t *sector)
+{
+	uint32_t result = 0;
+	for (int byte = 0; byte < EDC_MODE1_OFFSET; byte += 4)
+	{
+		result = EDC_crctable[(result ^ sector[byte+0]) & 0xffL] ^ (result >> 8);
+		result = EDC_crctable[(result ^ sector[byte+1]) & 0xffL] ^ (result >> 8);
+		result = EDC_crctable[(result ^ sector[byte+2]) & 0xffL] ^ (result >> 8);
+		result = EDC_crctable[(result ^ sector[byte+3]) & 0xffL] ^ (result >> 8);
+	}
+
+	sector[EDC_MODE1_OFFSET+0] = (result >> 0) & 0xff;
+	sector[EDC_MODE1_OFFSET+1] = (result >> 8) & 0xff;
+	sector[EDC_MODE1_OFFSET+2] = (result >> 16) & 0xff;
+	sector[EDC_MODE1_OFFSET+3] = (result >> 24) & 0xff;
 }
 
 /**

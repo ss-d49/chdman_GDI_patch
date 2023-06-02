@@ -1,10 +1,8 @@
-# chdman standalone
+# chdman standalone with added support for the correct extraction of Dreamcast CHDs
 
-Can be built on [Termux](https://termux.dev/).
+Code has been modified as cleanly as possible using code contriubted by a deleted user on unmerged pull request 7717 on the official mame repo.
 
-This repository is a fork of [MAME](https://github.com/mamedev/mame/)
-
-for real contributors to the chdman utility, please visit their repository.
+I hope to update this to the latest version of mame at some point to keep this version alive. I do hope that some day this may be merged in the official mame repo, but until then at least you have an easy to compile version of the code.
 
 ## Compilation
 
@@ -12,33 +10,12 @@ for real contributors to the chdman utility, please visit their repository.
 
 ```
 apt update && apt dist-upgrade -y
-apt install build-essential git cmake ninja
+apt install build-essential git cmake
 ```
-
-> **Note**
->
-> On Debian/Ubuntu, the Ninja package is called `ninja-build` instead of `ninja`.
 
 ### Build chdman
 
 ```
-git clone https://github.com/CharlesThobe/chdman.git
-cd chdman
-cmake -B build -G Ninja
-cmake --build build
+cmake -B build -S . -DCMAKE_INSTALL_PREFIX=<install directory of your choice>
+cmake --build build -j`nproc` --target install
 ```
-
-The `chdman` binary will be in the `build/` directory.
-
-### Install on Termux
-
-After you compile, run:
-```
-cp chdman ~/../usr/bin/.
-```
-
-> **Note**
->
-> You can copy `CMakeLists.txt`, `cmake_subdirs/`, `src/version.cpp` and
-> `src/osd/modules/lib/osd_getenv.cpp` over the MAME source tree and it will
-> build.
