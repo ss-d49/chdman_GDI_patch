@@ -58,6 +58,7 @@ const int MODE_NORMAL = 0;
 const int MODE_CUEBIN = 1;
 const int MODE_GDI = 2;
 const int MODE_GDROM_CUEBIN = 3;
+const int MODE_CUEBIN_SPLIT = 4;
 
 // command modifier
 #define REQUIRED "~"
@@ -95,6 +96,7 @@ const int MODE_GDROM_CUEBIN = 3;
 #define OPTION_UNIT_SIZE "unitsize"
 #define OPTION_COMPRESSION "compression"
 #define OPTION_INPUT_PARENT "inputparent"
+#define OPTION_OUTPUT_SPLIT_BIN "outputsplitbin"
 #define OPTION_OUTPUT_PARENT "outputparent"
 #define OPTION_IDENT "ident"
 #define OPTION_CHS "chs"
@@ -605,6 +607,7 @@ static const option_description s_options[] =
 	{ OPTION_INPUT_PARENT,          "ip",   true, " <filename>: parent file name for input CHD" },
 	{ OPTION_OUTPUT,                "o",    true, " <filename>: output file name" },
 	{ OPTION_OUTPUT_BIN,            "ob",   true, " <filename>: output file name for binary data" },
+	{ OPTION_OUTPUT_SPLIT_BIN,      "sb",   false, " <filename>: output split bin." },
 	{ OPTION_OUTPUT_FORCE,          "f",    false, ": force overwriting an existing file" },
 	{ OPTION_OUTPUT_PARENT,         "op",   true, " <filename>: parent file name for output CHD" },
 	{ OPTION_INPUT_START_BYTE,      "isb",  true, " <offset>: starting byte offset within the input" },
@@ -743,6 +746,7 @@ static const command_description s_commands[] =
 		{
 			REQUIRED OPTION_OUTPUT,
 			OPTION_OUTPUT_BIN,
+			OPTION_OUTPUT_SPLIT_BIN,
 			OPTION_OUTPUT_FORCE,
 			REQUIRED OPTION_INPUT,
 			OPTION_INPUT_PARENT,
@@ -1343,11 +1347,11 @@ void output_track_metadata(int mode, util::core_file &file, int tracknum, const 
 		const char *const quotestr = needquote ? "\"" : "";
 		file.printf("%d %d %d %d %s%s%s %d\n", tracknum+1, frameoffs, mode, size, quotestr, filename, quotestr, discoffs);
 	}
-	else if (mode == MODE_CUEBIN || mode == MODE_GDROM_CUEBIN)
+	else if (mode == MODE_CUEBIN || mode == MODE_GDROM_CUEBIN || mode == MODE_CUEBIN_SPLIT)
 	{
 		// first track specifies the file
 		// GDROM .cue/.bin has one file per track
-		if (tracknum == 0 || mode == MODE_GDROM_CUEBIN)
+		if (tracknum == 0 || mode == MODE_GDROM_CUEBIN || mode == MODE_CUEBIN || mode == MODE_CUEBIN_SPLIT)
 			file.printf("FILE \"%s\" BINARY\n", filename);
 
 		// determine submode
@@ -2566,14 +2570,14 @@ static void do_extract_cd(parameters_map &params)
 
 		if (output_file_str->second->find(".cue") != -1)
 		{
-			mode = MODE_CUEBIN;
+			mode = (params.contains(OPTION_OUTPUT_SPLIT_BIN)) ? MODE_CUEBIN_SPLIT : MODE_CUEBIN;
 		}
 		else if (output_file_str->second->find(".gdi") != -1)
 		{
 			mode = MODE_GDI;
 		}
 
-		if (mode == MODE_CUEBIN && toc.flags == CD_FLAG_GDROM)
+		if ((mode == MODE_CUEBIN || mode == MODE_CUEBIN_SPLIT) && toc.flags == CD_FLAG_GDROM)
 		{
 			mode = MODE_GDROM_CUEBIN;
 			gdrom_convert_toc(&toc);
@@ -2585,7 +2589,7 @@ static void do_extract_cd(parameters_map &params)
 			report_error(1, "Unable to open file (%s): %s", *output_file_str->second, filerr.message());
 
 		// process output BIN file
-		if (mode != MODE_GDI && mode != MODE_GDROM_CUEBIN)
+		if (mode != MODE_GDI && mode != MODE_GDROM_CUEBIN && mode != MODE_CUEBIN_SPLIT)
 		{
 			filerr = util::core_file::open(*output_bin_file_str, OPEN_FLAG_WRITE | OPEN_FLAG_CREATE, output_bin_file);
 			if (filerr)
@@ -2617,10 +2621,15 @@ static void do_extract_cd(parameters_map &params)
 		{
 			std::string trackbin_name(basename);
 
-			if (mode == MODE_GDI || mode == MODE_GDROM_CUEBIN)
+			if (mode == MODE_GDI || mode == MODE_GDROM_CUEBIN  || mode == MODE_CUEBIN_SPLIT)
 			{
 				char temp[11];
-				sprintf(temp, " (Track %02d).bin", tracknum+1);
+				if (mode == MODE_CUEBIN_SPLIT) {
+					sprintf(temp, " (Track %02d).bin", tracknum+1);
+				}
+				else {
+					sprintf(temp, " (Track %01d).bin", tracknum+1);
+				}
 				trackbin_name.append(temp);
 				
 				output_bin_file.reset();
@@ -2644,7 +2653,7 @@ static void do_extract_cd(parameters_map &params)
 			{
 				output_track_metadata(mode, *output_toc_file, tracknum, trackinfo, std::string(core_filename_extract_base(trackbin_name)), discoffs, outputoffs);
 			}
-			else if (mode == MODE_GDROM_CUEBIN)
+			else if (mode == MODE_GDROM_CUEBIN || mode == MODE_CUEBIN_SPLIT)
 			{
 				output_track_metadata(mode, *output_toc_file, tracknum, trackinfo, std::string(core_filename_extract_base(trackbin_name)), 0, outputoffs);
 			}
@@ -2656,7 +2665,7 @@ static void do_extract_cd(parameters_map &params)
 			// If this is bin/cue output and the CHD contains subdata, warn the user and don't include
 			// the subdata size in the buffer calculation.
 			uint32_t output_frame_size = trackinfo.datasize + ((trackinfo.subtype != CD_SUB_NONE) ? trackinfo.subsize : 0);
-			if (trackinfo.subtype != CD_SUB_NONE && ((mode == MODE_CUEBIN) || (mode == MODE_GDI) || (mode == MODE_GDROM_CUEBIN)))
+			if (trackinfo.subtype != CD_SUB_NONE && ((mode == MODE_CUEBIN) || (mode == MODE_GDI) || (mode == MODE_GDROM_CUEBIN) || (mode == MODE_CUEBIN_SPLIT)))
 			{
 				printf("Warning: Track %d has subcode data.  bin/cue and gdi formats cannot contain subcode data and it will be omitted.\n", tracknum+1);
 				printf("       : This may affect usage of the output image.  Use bin/toc output to keep all data.\n");
@@ -2722,7 +2731,7 @@ static void do_extract_cd(parameters_map &params)
 
 				// for CDRWin and GDI audio tracks must be reversed
 				// in the case of GDI and CHD version < 5 we assuming source CHD image is GDROM so audio tracks is already reversed
-				if (((mode == MODE_GDI && input_chd.version() > 4) || (mode == MODE_CUEBIN) || (mode == MODE_GDROM_CUEBIN)) && (trackinfo.trktype == CD_TRACK_AUDIO))
+				if (((mode == MODE_GDI && input_chd.version() > 4) || (mode == MODE_CUEBIN) || (mode == MODE_GDROM_CUEBIN) || (mode == MODE_CUEBIN_SPLIT)) && (trackinfo.trktype == CD_TRACK_AUDIO))
 					for (int swapindex = 0; swapindex < trackinfo.datasize; swapindex += 2)
 					{
 						uint8_t swaptemp = buffer[bufferoffs + swapindex];

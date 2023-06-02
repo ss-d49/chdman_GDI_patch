@@ -8,7 +8,7 @@ if(NOT CMAKE_BUILD_TYPE)
 set(CMAKE_BUILD_TYPE Release)
 endif()
 
-set(CMAKE_CXX_STANDARD 17) #needed by libocore and libutils. -
+set(CMAKE_CXX_STANDARD 20) #needed by libocore and libutils. -
 #set globally to match MAME's genie scripts.
 
 if(WIN32)
@@ -47,7 +47,7 @@ target_include_directories(chdman PRIVATE
   ${CMAKE_SOURCE_DIR}/3rdparty
   ${CMAKE_SOURCE_DIR}/3rdparty/libflac/include
 )
-set_property(TARGET chdman PROPERTY CXX_STANDARD 17)
+#set_property(TARGET chdman PROPERTY CXX_STANDARD 17)
 target_compile_definitions(chdman PRIVATE
   BARE_BUILD_VERSION="${build_version}"
   BARE_VCS_REVISION="${vcs_revision}"
