@@ -4,7 +4,7 @@ Code has been modified as cleanly as possible using code contriubted by a delete
 
 I hope to update this to the latest version of mame at some point to keep this version alive. I do hope that some day this may be merged in the official mame repo, but until then at least you have an easy to compile version of the code.
 
-UPDATED TO VERSION 2.44
+UPDATED TO VERSION 2.49
 
 ## Compilation
 
